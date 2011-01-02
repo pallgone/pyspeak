@@ -1,6 +1,8 @@
 #!/usr/bin/python
 from Tkinter import *
-import os,  sys, urllib, re, mad, ao
+import os, sys, time, urllib, re, mad, ao, pygst, gst
+
+import time
 
 lang = "en"
 
@@ -10,19 +12,6 @@ class AppURLopener(urllib.FancyURLopener):
 urllib._urlopener = AppURLopener()
 r = re.compile("[,.;?()\\d]+ *")
 
-
-def output(text, lang):
-    text = r.split(text)
-    for x in text:
-        #os.system("mpg123 -q 'http://translate.google.com/translate_tts?q=" + urllib.quote_plus(x) + "&tl=de'")
-        mf = mad.MadFile(urllib.urlopen("http://translate.google.com/translate_tts?q=" + urllib.quote_plus(x) + "&tl=" + lang))
-        dev = ao.AudioDevice('alsa', rate=mf.samplerate())
-        while 1:
-            buf = mf.read()
-            if buf is None:
-                break
-            dev.play(buf, len(buf))
-    return
 
 if len(sys.argv) > 1:
     text = sys.argv[1]
@@ -35,7 +24,41 @@ class mywidgets:
         frame.pack()
         self.txtfr(frame)
         self.makeButton(frame)
+        self.player = gst.element_factory_make("playbin2", "player")
+        bus = self.player.get_bus()
+        bus.add_signal_watch()
+        bus.connect("message", self.on_message)
         return
+
+    def output(self, text, lang):
+        text = r.split(text)
+        for x in text:
+            self.playmode = True
+            self.player.set_property('uri', "http://translate.google.com/translate_tts?q=" + urllib.quote_plus(x) + "&tl=" + lang)
+            self.player.set_state(gst.STATE_PLAYING)
+            while self.playmode:
+                time.sleep(1)
+        #os.system("mpg123 -q 'http://translate.google.com/translate_tts?q=" + urllib.quote_plus(x) + "&tl=de'")
+        # mf = mad.MadFile(urllib.urlopen("http://translate.google.com/translate_tts?q=" + urllib.quote_plus(x) + "&tl=" + lang))
+        # dev = ao.AudioDevice('alsa', rate=mf.samplerate())
+        # while 1:
+        #     buf = mf.read()
+        #     if buf is None:
+        #         break
+        #     dev.play(buf, len(buf))
+        return
+
+    def on_message(self, bus, message):
+        t = message.type
+        if t == gst.MESSAGE_EOS:
+            player.set_state(gst.STATE_NULL)
+            self.playmode = False
+        elif t == gst.MESSAGE_ERROR:
+            player.set_state(gst.STATE_NULL)
+            err, debug = message.parse_error()
+            print "Error: %s" % err, debug
+            self.playmode = False
+
 
     def txtfr(self,frame):
         #define a new frame and put a text area in it
@@ -58,10 +81,10 @@ class mywidgets:
         return
     
     def tts_en(self):
-        output(self.text.get('1.0', 'end').encode('utf-8'), "en")
+        self.output(self.text.get('1.0', 'end').encode('utf-8'), "en")
         return
     def tts_de(self):
-        output(self.text.get('1.0', 'end').encode('utf-8'), "de")
+        self.output(self.text.get('1.0', 'end').encode('utf-8'), "de")
         return
 
     
